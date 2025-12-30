@@ -1,6 +1,6 @@
 use clap::Parser;
-use std::fs;
-use std::io::{self, Read};
+use std::fs::File;
+use std::io::{self, BufReader};
 use std::path::PathBuf;
 use std::process;
 
@@ -18,30 +18,25 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let markdown = match read_input(args.file.as_ref()) {
-        Ok(content) => content,
-        Err(e) => {
-            eprintln!("error: {e}");
-            process::exit(1);
+    let result = match &args.file {
+        Some(path) => {
+            let file = File::open(path).unwrap_or_else(|e| {
+                eprintln!("error: {e}");
+                process::exit(1);
+            });
+            fmq::fmq_reader(&args.expr, BufReader::new(file))
+        }
+        None => {
+            let stdin = io::stdin().lock();
+            fmq::fmq_reader(&args.expr, stdin)
         }
     };
 
-    match fmq::fmq(&args.expr, &markdown) {
+    match result {
         Ok(output) => print!("{output}"),
         Err(e) => {
             eprintln!("error: {e}");
             process::exit(1);
-        }
-    }
-}
-
-fn read_input(file: Option<&PathBuf>) -> io::Result<String> {
-    match file {
-        Some(path) => fs::read_to_string(path),
-        None => {
-            let mut buf = String::new();
-            io::stdin().read_to_string(&mut buf)?;
-            Ok(buf)
         }
     }
 }
