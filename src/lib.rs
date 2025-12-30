@@ -1,8 +1,10 @@
 mod frontmatter;
 mod query;
 
-pub use frontmatter::{extract, reassemble, Document};
+pub use frontmatter::{extract, extract_reader, reassemble, Document};
 pub use query::{is_mutation, run};
+
+use std::io::BufRead;
 
 use std::fmt;
 
@@ -40,6 +42,19 @@ pub fn fmq(expr: &str, markdown: &str) -> Result<String, Error> {
     let result = run(expr, &doc.frontmatter)?;
 
     if is_mutation(expr) {
+        let yaml = query::json_to_yaml(&result)?;
+        Ok(reassemble(&yaml, &doc.body))
+    } else {
+        Ok(format_output(&result))
+    }
+}
+
+pub fn fmq_reader<R: BufRead>(expr: &str, reader: R) -> Result<String, Error> {
+    let need_body = is_mutation(expr);
+    let doc = extract_reader(reader, need_body)?;
+    let result = run(expr, &doc.frontmatter)?;
+
+    if need_body {
         let yaml = query::json_to_yaml(&result)?;
         Ok(reassemble(&yaml, &doc.body))
     } else {

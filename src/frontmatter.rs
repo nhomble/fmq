@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt;
+use std::io::BufRead;
 
 #[derive(Debug)]
 pub struct ParseError(pub String);
@@ -42,6 +43,55 @@ pub fn extract(markdown: &str) -> Result<Document, ParseError> {
         .or_else(|| rest.strip_prefix("\r\n"))
         .unwrap_or(rest)
         .to_string();
+
+    Ok(Document { frontmatter, body })
+}
+
+pub fn extract_reader<R: BufRead>(mut reader: R, need_body: bool) -> Result<Document, ParseError> {
+    let mut first_line = String::new();
+    reader
+        .read_line(&mut first_line)
+        .map_err(|e| ParseError(e.to_string()))?;
+
+    if first_line.trim() != "---" {
+        return Err(ParseError("no frontmatter found".into()));
+    }
+
+    let mut frontmatter = String::new();
+    loop {
+        let mut line = String::new();
+        let bytes = reader
+            .read_line(&mut line)
+            .map_err(|e| ParseError(e.to_string()))?;
+
+        if bytes == 0 {
+            return Err(ParseError("unclosed frontmatter".into()));
+        }
+
+        if line.trim() == "---" {
+            break;
+        }
+
+        frontmatter.push_str(&line);
+    }
+
+    // Trim trailing newline from frontmatter
+    if frontmatter.ends_with('\n') {
+        frontmatter.pop();
+        if frontmatter.ends_with('\r') {
+            frontmatter.pop();
+        }
+    }
+
+    let body = if need_body {
+        let mut body = String::new();
+        reader
+            .read_to_string(&mut body)
+            .map_err(|e| ParseError(e.to_string()))?;
+        body
+    } else {
+        String::new()
+    };
 
     Ok(Document { frontmatter, body })
 }
