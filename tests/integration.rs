@@ -57,3 +57,37 @@ fn mutations() {
         );
     }
 }
+
+#[test]
+fn errors() {
+    let fixtures = Path::new("tests/fixtures/errors");
+
+    for entry in fs::read_dir(fixtures).expect("fixtures/errors not found") {
+        let dir = entry.unwrap().path();
+        if !dir.is_dir() {
+            continue;
+        }
+
+        let input = read_fixture(&dir, "input.md") + "\n";
+        let expr = read_fixture(&dir, "expr.txt");
+        let expected_err = read_fixture(&dir, "error.txt");
+
+        let result = fmq::fmq(&expr, &input);
+
+        assert!(
+            result.is_err(),
+            "{}: expected error, got {:?}",
+            dir.display(),
+            result
+        );
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains(&expected_err),
+            "{}: error '{}' should contain '{}'",
+            dir.display(),
+            err_msg,
+            expected_err
+        );
+    }
+}
