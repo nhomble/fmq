@@ -45,11 +45,11 @@ pub fn is_mutation(expr: &str) -> bool {
 }
 
 pub fn yaml_to_json(yaml: &str) -> Result<Value, QueryError> {
-    serde_yaml::from_str(yaml).map_err(|e| QueryError(format!("invalid yaml: {e}")))
+    serde_yml::from_str(yaml).map_err(|e| QueryError(format!("invalid yaml: {e}")))
 }
 
 pub fn json_to_yaml(value: &Value) -> Result<String, QueryError> {
-    serde_yaml::to_string(value).map_err(|e| QueryError(format!("yaml serialization failed: {e}")))
+    serde_yml::to_string(value).map_err(|e| QueryError(format!("yaml serialization failed: {e}")))
 }
 
 pub fn run(expr: &str, yaml: &str) -> Result<Value, QueryError> {
