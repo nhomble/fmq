@@ -179,3 +179,34 @@ fn in_place() {
         fs::remove_file(&temp_file).ok();
     }
 }
+
+#[test]
+fn in_place_rejects_non_mutation() {
+    // --in-place requires a mutation expression
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join("fmq-test-non-mutation.md");
+
+    fs::write(&temp_file, "---\ntitle: Hello\n---\nBody\n").unwrap();
+
+    // Expression uses + not +=, so is_mutation returns false
+    let output = Command::new(env!("CARGO_BIN_EXE_fmq"))
+        .arg(". + {topics: [\"ai\"]}")
+        .arg(&temp_file)
+        .arg("--in-place")
+        .output()
+        .expect("failed to execute fmq");
+
+    assert!(
+        !output.status.success(),
+        "should fail for non-mutation expression"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("mutation"),
+        "error should mention mutation: {}",
+        stderr
+    );
+
+    fs::remove_file(&temp_file).ok();
+}
