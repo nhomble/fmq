@@ -1,12 +1,41 @@
 mod frontmatter;
 mod query;
 
-pub use frontmatter::{extract, reassemble, Document, ParseError};
-pub use query::{is_mutation, run, QueryError};
+pub use frontmatter::{extract, reassemble, Document};
+pub use query::{is_mutation, run};
 
-use std::error::Error;
+use std::fmt;
 
-pub fn fmq(expr: &str, markdown: &str) -> Result<String, Box<dyn Error>> {
+#[derive(Debug)]
+pub enum Error {
+    Parse(String),
+    Query(String),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::Parse(msg) => write!(f, "{}", msg),
+            Error::Query(msg) => write!(f, "{}", msg),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl From<frontmatter::ParseError> for Error {
+    fn from(e: frontmatter::ParseError) -> Self {
+        Error::Parse(e.0)
+    }
+}
+
+impl From<query::QueryError> for Error {
+    fn from(e: query::QueryError) -> Self {
+        Error::Query(e.0)
+    }
+}
+
+pub fn fmq(expr: &str, markdown: &str) -> Result<String, Error> {
     let doc = extract(markdown)?;
     let result = run(expr, &doc.frontmatter)?;
 

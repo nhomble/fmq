@@ -1,14 +1,74 @@
-# another query cli for frontmatter
+# fmq
 
-help my agents programmatically manage properties of my markdown files
+jq for markdown frontmatter.
 
-## Implementation
+Query and mutate YAML frontmatter in markdown files using jq syntax.
 
-1. Stream the input file for the frontmatter section
-2. Manipulate the frontmatter with `yq`
-3. Then output the query passed into `yq`
+## Install
 
-In other words, I don't expect this to be a complicated script beyond frontmatter parsing. The rest can be delegated to `yq` or an equivalent library
-if it accepts a familiar syntax. 
+### From releases
 
-Write this is simple rust for me to understand/learn and get the cross platform cli benefits.
+Download the latest binary from [GitHub Releases](https://github.com/nhomble/fmq/releases).
+
+### From source
+
+```bash
+cargo install --path .
+```
+
+## Usage
+
+```bash
+fmq <expression> [file]
+```
+
+- If `file` is omitted, reads from stdin
+- Queries output the result to stdout
+- Mutations output the modified markdown to stdout
+
+## Examples
+
+### Query
+
+```bash
+# Get a field
+fmq '.title' post.md
+# Hello World
+
+# Get nested field
+fmq '.author.name' post.md
+# Alice
+
+# Get array
+fmq '.tags' post.md
+# ["rust", "cli"]
+
+# From stdin
+cat post.md | fmq '.title'
+```
+
+### Mutate
+
+```bash
+# Set a field
+fmq '.title = "New Title"' post.md > updated.md
+
+# Add to array
+fmq '.tags += ["new-tag"]' post.md > updated.md
+
+# Delete a field
+fmq 'del(.draft)' post.md > updated.md
+
+# Update nested field
+fmq '.author.name = "Bob"' post.md > updated.md
+```
+
+### Piping
+
+```bash
+# Query then mutate
+fmq '.tags' post.md | jq '.[0]'
+
+# Chain mutations
+fmq '.title = "New"' post.md | fmq '.draft = false' > updated.md
+```
