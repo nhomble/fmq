@@ -1,6 +1,6 @@
 [package]
 name = "fmq"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "jq for markdown frontmatter"
 license = "MIT"
