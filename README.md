@@ -2,8 +2,6 @@
 
 jq for markdown frontmatter.
 
-Query and mutate YAML frontmatter in markdown files using jq syntax.
-
 ## Install
 
 ### From releases
