@@ -37,9 +37,16 @@ impl From<query::QueryError> for Error {
     }
 }
 
-pub fn fmq(expr: &str, markdown: &str) -> Result<String, Error> {
-    let doc = extract(markdown)?;
-    let result = run(expr, &doc.frontmatter)?;
+pub fn fmq(expr: &str, markdown: &str, init: bool) -> Result<String, Error> {
+    let doc = extract(markdown, init)?;
+
+    let frontmatter = if doc.frontmatter.is_empty() {
+        "{}".to_string()
+    } else {
+        doc.frontmatter.clone()
+    };
+
+    let result = run(expr, &frontmatter)?;
 
     if is_mutation(expr) {
         let yaml = query::json_to_yaml(&result)?;

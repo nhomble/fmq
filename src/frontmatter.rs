@@ -18,10 +18,16 @@ pub struct Document {
     pub body: String,
 }
 
-pub fn extract(markdown: &str) -> Result<Document, ParseError> {
+pub fn extract(markdown: &str, allow_empty: bool) -> Result<Document, ParseError> {
     let trimmed = markdown.trim_start();
 
     if !trimmed.starts_with("---") {
+        if allow_empty {
+            return Ok(Document {
+                frontmatter: String::new(),
+                body: markdown.to_string(),
+            });
+        }
         return Err(ParseError("no frontmatter found".into()));
     }
 
@@ -129,7 +135,7 @@ mod tests {
     #[test]
     fn extract_simple() {
         let md = "---\ntitle: Hello\n---\nBody text";
-        let doc = extract(md).unwrap();
+        let doc = extract(md, false).unwrap();
         assert_eq!(doc.frontmatter, "title: Hello");
         assert_eq!(doc.body, "Body text");
     }
@@ -137,7 +143,15 @@ mod tests {
     #[test]
     fn extract_no_frontmatter() {
         let md = "Just body text";
-        assert!(extract(md).is_err());
+        assert!(extract(md, false).is_err());
+    }
+
+    #[test]
+    fn extract_no_frontmatter_with_init() {
+        let md = "Just body text";
+        let doc = extract(md, true).unwrap();
+        assert_eq!(doc.frontmatter, "");
+        assert_eq!(doc.body, "Just body text");
     }
 
     #[test]
@@ -149,7 +163,7 @@ mod tests {
     #[test]
     fn roundtrip() {
         let md = "---\ntitle: Hello\ntags:\n  - rust\n---\nBody text\n";
-        let doc = extract(md).unwrap();
+        let doc = extract(md, false).unwrap();
         let reassembled = reassemble(&doc.frontmatter, &doc.body);
         assert_eq!(reassembled, md);
     }

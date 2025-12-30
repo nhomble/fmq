@@ -1,5 +1,5 @@
 use clap::Parser;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, BufReader};
 use std::path::PathBuf;
 use std::process;
@@ -17,30 +17,59 @@ struct Args {
     /// Treat missing frontmatter as empty (allows initializing frontmatter)
     #[arg(long)]
     init: bool,
+
+    /// Edit file in place
+    #[arg(short, long)]
+    in_place: bool,
 }
 
 fn main() {
     let args = Args::parse();
 
-    let result = match &args.file {
-        Some(path) => {
-            let file = File::open(path).unwrap_or_else(|e| {
-                eprintln!("error: {e}");
+    if args.in_place {
+        let path = match &args.file {
+            Some(p) => p,
+            None => {
+                eprintln!("error: --in-place requires a file");
                 process::exit(1);
-            });
-            fmq::fmq_reader(&args.expr, BufReader::new(file), args.init)
-        }
-        None => {
-            let stdin = io::stdin().lock();
-            fmq::fmq_reader(&args.expr, stdin, args.init)
-        }
-    };
+            }
+        };
 
-    match result {
-        Ok(output) => print!("{output}"),
-        Err(e) => {
+        let content = fs::read_to_string(path).unwrap_or_else(|e| {
             eprintln!("error: {e}");
             process::exit(1);
+        });
+
+        let output = fmq::fmq(&args.expr, &content, args.init).unwrap_or_else(|e| {
+            eprintln!("error: {e}");
+            process::exit(1);
+        });
+
+        fs::write(path, output).unwrap_or_else(|e| {
+            eprintln!("error: {e}");
+            process::exit(1);
+        });
+    } else {
+        let result = match &args.file {
+            Some(path) => {
+                let file = File::open(path).unwrap_or_else(|e| {
+                    eprintln!("error: {e}");
+                    process::exit(1);
+                });
+                fmq::fmq_reader(&args.expr, BufReader::new(file), args.init)
+            }
+            None => {
+                let stdin = io::stdin().lock();
+                fmq::fmq_reader(&args.expr, stdin, args.init)
+            }
+        };
+
+        match result {
+            Ok(output) => print!("{output}"),
+            Err(e) => {
+                eprintln!("error: {e}");
+                process::exit(1);
+            }
         }
     }
 }
