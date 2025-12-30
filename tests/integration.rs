@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::Cursor;
 use std::path::Path;
+use std::process::Command;
 
 fn read_fixture(dir: &Path, name: &str) -> String {
     fs::read_to_string(dir.join(name))
@@ -23,7 +24,8 @@ fn queries() {
         let expr = read_fixture(&dir, "expr.txt");
         let expected = read_fixture(&dir, "output.txt");
 
-        let result = fmq::fmq(&expr, &input).unwrap_or_else(|e| panic!("{}: {}", dir.display(), e));
+        let result =
+            fmq::fmq(&expr, &input, false).unwrap_or_else(|e| panic!("{}: {}", dir.display(), e));
 
         assert_eq!(
             result.trim_end(),
@@ -48,7 +50,8 @@ fn mutations() {
         let expr = read_fixture(&dir, "expr.txt");
         let expected = read_fixture(&dir, "output.md");
 
-        let result = fmq::fmq(&expr, &input).unwrap_or_else(|e| panic!("{}: {}", dir.display(), e));
+        let result =
+            fmq::fmq(&expr, &input, false).unwrap_or_else(|e| panic!("{}: {}", dir.display(), e));
 
         assert_eq!(
             result.trim_end(),
@@ -73,7 +76,7 @@ fn errors() {
         let expr = read_fixture(&dir, "expr.txt");
         let expected_err = read_fixture(&dir, "error.txt");
 
-        let result = fmq::fmq(&expr, &input);
+        let result = fmq::fmq(&expr, &input, false);
 
         assert!(
             result.is_err(),
@@ -123,5 +126,56 @@ fn init() {
             "failed: {}",
             dir.file_name().unwrap().to_string_lossy()
         );
+    }
+}
+
+#[test]
+fn in_place() {
+    let fixtures = Path::new("tests/fixtures/mutations");
+
+    for entry in fs::read_dir(fixtures).expect("fixtures/mutations not found") {
+        let dir = entry.unwrap().path();
+        if !dir.is_dir() {
+            continue;
+        }
+
+        let input = read_fixture(&dir, "input.md") + "\n";
+        let expr = read_fixture(&dir, "expr.txt");
+        let expected = read_fixture(&dir, "output.md");
+
+        // Create temp file
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join(format!(
+            "fmq-test-{}.md",
+            dir.file_name().unwrap().to_string_lossy()
+        ));
+        fs::write(&temp_file, &input).unwrap();
+
+        // Run CLI with --in-place
+        let output = Command::new(env!("CARGO_BIN_EXE_fmq"))
+            .arg(&expr)
+            .arg(&temp_file)
+            .arg("--in-place")
+            .output()
+            .expect("failed to execute fmq");
+
+        assert!(
+            output.status.success(),
+            "fmq failed for {}: {}",
+            dir.display(),
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        // Verify file was modified
+        let result = fs::read_to_string(&temp_file).unwrap();
+        assert_eq!(
+            result.trim_end(),
+            expected,
+            "failed: {}",
+            dir.file_name().unwrap().to_string_lossy()
+        );
+
+        // Cleanup
+        fs::remove_file(&temp_file).ok();
     }
 }
