@@ -1,0 +1,6 @@
+---
+tags:
+- rust
+- new
+---
+Body.
