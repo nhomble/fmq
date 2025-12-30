@@ -40,13 +40,13 @@ impl From<query::QueryError> for Error {
 pub fn fmq(expr: &str, markdown: &str, init: bool) -> Result<String, Error> {
     let doc = extract(markdown, init)?;
 
-    let frontmatter = if doc.frontmatter.is_empty() {
-        "{}".to_string()
+    let frontmatter: &str = if doc.frontmatter.is_empty() {
+        "{}"
     } else {
-        doc.frontmatter.clone()
+        &doc.frontmatter
     };
 
-    let result = run(expr, &frontmatter)?;
+    let result = run(expr, frontmatter)?;
 
     if is_mutation(expr) {
         let yaml = query::json_to_yaml(&result)?;
@@ -60,13 +60,13 @@ pub fn fmq_reader<R: BufRead>(expr: &str, reader: R, init: bool) -> Result<Strin
     let need_body = is_mutation(expr);
     let doc = extract_reader(reader, need_body, init)?;
 
-    let frontmatter = if doc.frontmatter.is_empty() {
-        "{}".to_string()
+    let frontmatter: &str = if doc.frontmatter.is_empty() {
+        "{}"
     } else {
-        doc.frontmatter.clone()
+        &doc.frontmatter
     };
 
-    let result = run(expr, &frontmatter)?;
+    let result = run(expr, frontmatter)?;
 
     if need_body {
         let yaml = query::json_to_yaml(&result)?;
