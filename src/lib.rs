@@ -49,10 +49,17 @@ pub fn fmq(expr: &str, markdown: &str) -> Result<String, Error> {
     }
 }
 
-pub fn fmq_reader<R: BufRead>(expr: &str, reader: R) -> Result<String, Error> {
+pub fn fmq_reader<R: BufRead>(expr: &str, reader: R, init: bool) -> Result<String, Error> {
     let need_body = is_mutation(expr);
-    let doc = extract_reader(reader, need_body)?;
-    let result = run(expr, &doc.frontmatter)?;
+    let doc = extract_reader(reader, need_body, init)?;
+
+    let frontmatter = if doc.frontmatter.is_empty() {
+        "{}".to_string()
+    } else {
+        doc.frontmatter.clone()
+    };
+
+    let result = run(expr, &frontmatter)?;
 
     if need_body {
         let yaml = query::json_to_yaml(&result)?;

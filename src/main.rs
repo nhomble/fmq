@@ -13,6 +13,10 @@ struct Args {
 
     /// Input file (reads stdin if omitted)
     file: Option<PathBuf>,
+
+    /// Treat missing frontmatter as empty (allows initializing frontmatter)
+    #[arg(long)]
+    init: bool,
 }
 
 fn main() {
@@ -24,11 +28,11 @@ fn main() {
                 eprintln!("error: {e}");
                 process::exit(1);
             });
-            fmq::fmq_reader(&args.expr, BufReader::new(file))
+            fmq::fmq_reader(&args.expr, BufReader::new(file), args.init)
         }
         None => {
             let stdin = io::stdin().lock();
-            fmq::fmq_reader(&args.expr, stdin)
+            fmq::fmq_reader(&args.expr, stdin, args.init)
         }
     };
 

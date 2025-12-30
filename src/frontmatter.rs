@@ -47,13 +47,27 @@ pub fn extract(markdown: &str) -> Result<Document, ParseError> {
     Ok(Document { frontmatter, body })
 }
 
-pub fn extract_reader<R: BufRead>(mut reader: R, need_body: bool) -> Result<Document, ParseError> {
+pub fn extract_reader<R: BufRead>(
+    mut reader: R,
+    need_body: bool,
+    allow_empty: bool,
+) -> Result<Document, ParseError> {
     let mut first_line = String::new();
     reader
         .read_line(&mut first_line)
         .map_err(|e| ParseError(e.to_string()))?;
 
     if first_line.trim() != "---" {
+        if allow_empty {
+            let mut body = first_line;
+            reader
+                .read_to_string(&mut body)
+                .map_err(|e| ParseError(e.to_string()))?;
+            return Ok(Document {
+                frontmatter: String::new(),
+                body,
+            });
+        }
         return Err(ParseError("no frontmatter found".into()));
     }
 
