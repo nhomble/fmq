@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Cursor;
 use std::path::Path;
 
 fn read_fixture(dir: &Path, name: &str) -> String {
@@ -88,6 +89,39 @@ fn errors() {
             dir.display(),
             err_msg,
             expected_err
+        );
+    }
+}
+
+#[test]
+fn init() {
+    let fixtures = Path::new("tests/fixtures/init");
+
+    for entry in fs::read_dir(fixtures).expect("fixtures/init not found") {
+        let dir = entry.unwrap().path();
+        if !dir.is_dir() {
+            continue;
+        }
+
+        let input = read_fixture(&dir, "input.md") + "\n";
+        let expr = read_fixture(&dir, "expr.txt");
+
+        let is_mutation = dir.join("output.md").exists();
+        let expected = if is_mutation {
+            read_fixture(&dir, "output.md")
+        } else {
+            read_fixture(&dir, "output.txt")
+        };
+
+        let reader = Cursor::new(input);
+        let result = fmq::fmq_reader(&expr, reader, true)
+            .unwrap_or_else(|e| panic!("{}: {}", dir.display(), e));
+
+        assert_eq!(
+            result.trim_end(),
+            expected,
+            "failed: {}",
+            dir.file_name().unwrap().to_string_lossy()
         );
     }
 }
