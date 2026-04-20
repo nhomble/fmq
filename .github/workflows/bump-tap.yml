@@ -1,0 +1,85 @@
+name: Bump Homebrew Tap
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to bump to (e.g. v0.3.0)"
+        required: true
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tap
+        uses: actions/checkout@v4
+        with:
+          repository: nhomble/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Compute checksums
+        id: sha
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          base="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          arm=$(curl -sfL "${base}/fmq-aarch64-apple-darwin.tar.gz" | shasum -a 256 | cut -d' ' -f1)
+          amd=$(curl -sfL "${base}/fmq-x86_64-apple-darwin.tar.gz"   | shasum -a 256 | cut -d' ' -f1)
+          [ -n "$arm" ] && [ -n "$amd" ] || { echo "missing asset"; exit 1; }
+          echo "arm=$arm" >> "$GITHUB_OUTPUT"
+          echo "amd=$amd" >> "$GITHUB_OUTPUT"
+
+      - name: Update formula
+        env:
+          V: ${{ steps.tag.outputs.version }}
+          ARM_SHA: ${{ steps.sha.outputs.arm }}
+          AMD_SHA: ${{ steps.sha.outputs.amd }}
+        run: |
+          python3 - <<'PY'
+          import os, re, pathlib
+          p = pathlib.Path("tap/Formula/fmq.rb")
+          text = p.read_text()
+          v = os.environ["V"]
+          text = re.sub(r'version "[^"]+"', f'version "{v}"', text, count=1)
+          text = re.sub(r"/releases/download/v[^/]+/", f"/releases/download/v{v}/", text)
+          for asset, sha in [
+              ("fmq-aarch64-apple-darwin.tar.gz", os.environ["ARM_SHA"]),
+              ("fmq-x86_64-apple-darwin.tar.gz",   os.environ["AMD_SHA"]),
+          ]:
+              text = re.sub(
+                  rf'({re.escape(asset)}"\s*\n\s+sha256 ")[a-f0-9]+',
+                  rf'\g<1>{sha}',
+                  text,
+              )
+          p.write_text(text)
+          PY
+
+      - name: Open PR
+        working-directory: tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          V: ${{ steps.tag.outputs.version }}
+        run: |
+          BRANCH="bump/fmq-${V}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add Formula/fmq.rb
+          git commit -m "fmq ${V}"
+          git push -u origin "$BRANCH" --force
+          gh pr create \
+            --title "fmq ${V}" \
+            --body "Automated bump for fmq ${V}." \
+            --head "$BRANCH" \
+            --base main || \
+          gh pr edit --title "fmq ${V}" --body "Automated bump for fmq ${V}." "$BRANCH"
