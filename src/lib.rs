@@ -2,7 +2,7 @@ mod frontmatter;
 mod query;
 
 pub use frontmatter::{extract, extract_reader, reassemble, Document};
-pub use query::{is_mutation, run};
+pub use query::{is_mutation, run, run_all};
 
 use std::io::BufRead;
 
@@ -46,12 +46,12 @@ pub fn fmq(expr: &str, markdown: &str, init: bool) -> Result<String, Error> {
         &doc.frontmatter
     };
 
-    let result = run(expr, frontmatter)?;
-
     if is_mutation(expr) {
+        let result = run(expr, frontmatter)?;
         to_document(&result, &doc.body)
     } else {
-        Ok(format_output(&result))
+        let results = run_all(expr, frontmatter)?;
+        Ok(format_outputs(&results))
     }
 }
 
@@ -65,12 +65,12 @@ pub fn fmq_reader<R: BufRead>(expr: &str, reader: R, init: bool) -> Result<Strin
         &doc.frontmatter
     };
 
-    let result = run(expr, frontmatter)?;
-
     if need_body {
+        let result = run(expr, frontmatter)?;
         to_document(&result, &doc.body)
     } else {
-        Ok(format_output(&result))
+        let results = run_all(expr, frontmatter)?;
+        Ok(format_outputs(&results))
     }
 }
 
@@ -110,4 +110,11 @@ fn format_output(value: &serde_json::Value) -> String {
         serde_json::Value::String(s) => s.clone(),
         _ => serde_json::to_string_pretty(value).unwrap_or_default(),
     }
+}
+
+fn format_outputs(values: &[serde_json::Value]) -> String {
+    values
+        .iter()
+        .map(|v| format!("{}\n", format_output(v)))
+        .collect()
 }

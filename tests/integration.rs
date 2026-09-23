@@ -213,3 +213,63 @@ fn in_place_rejects_non_object_result() {
 
     fs::remove_file(&temp_file).ok();
 }
+
+#[test]
+fn cli_prints_all_query_outputs() {
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join("fmq-test-multi-output.md");
+
+    let original = "---\ntags:\n  - a\n  - b\n  - c\n---\nBody.\n";
+    fs::write(&temp_file, original).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_fmq"))
+        .arg(".tags[]")
+        .arg(&temp_file)
+        .output()
+        .expect("failed to execute fmq");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"a\nb\nc\n");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_fmq"))
+        .arg("empty")
+        .arg(&temp_file)
+        .output()
+        .expect("failed to execute fmq");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"");
+
+    fs::remove_file(&temp_file).ok();
+}
+
+#[test]
+fn in_place_rejects_empty_output() {
+    // --in-place requires exactly one output; `empty` produces none.
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join("fmq-test-empty-output.md");
+
+    let original = "---\ntitle: Hello\n---\nBody\n";
+    fs::write(&temp_file, original).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_fmq"))
+        .arg("empty")
+        .arg(&temp_file)
+        .arg("--in-place")
+        .output()
+        .expect("failed to execute fmq");
+
+    assert!(!output.status.success(), "should fail for empty result");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no output"),
+        "error should mention 'no output': {}",
+        stderr
+    );
+
+    let result = fs::read_to_string(&temp_file).unwrap();
+    assert_eq!(result, original, "file should be unchanged");
+
+    fs::remove_file(&temp_file).ok();
+}
