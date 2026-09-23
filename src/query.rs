@@ -14,34 +14,33 @@ impl fmt::Display for QueryError {
 
 impl Error for QueryError {}
 
+use jaq_syn::filter::{BinaryOp, Filter};
+use jaq_syn::MathOp;
+
+/// True if the expression's final pipe stage is an update, i.e. its output
+/// is intended to be the whole (modified) frontmatter object.
 pub fn is_mutation(expr: &str) -> bool {
-    let normalized = expr.replace(" ", "");
-
-    if normalized.contains("|=")
-        || normalized.contains("+=")
-        || normalized.contains("-=")
-        || normalized.contains("*=")
-        || normalized.contains("/=")
-        || normalized.contains("%=")
-        || normalized.contains("//=")
-    {
-        return true;
+    let (main, errs) = jaq_parse::parse(expr, jaq_parse::main());
+    match main {
+        Some(m) if errs.is_empty() => is_update(&m.body.0),
+        _ => false, // run() reports the parse error
     }
+}
 
-    let without_eq_eq = expr.replace("==", "");
-    if without_eq_eq.contains('=') {
-        return true;
+fn is_update(f: &Filter) -> bool {
+    match f {
+        Filter::Binary(_, BinaryOp::Pipe(_), r) => is_update(&r.0),
+        Filter::Binary(_, BinaryOp::Assign(_), _) => true,
+        Filter::Binary(l, BinaryOp::Math(MathOp::Add | MathOp::Mul), r) => matches!(
+            (&l.0, &r.0),
+            (Filter::Id, Filter::Object(_)) | (Filter::Object(_), Filter::Id)
+        ),
+        Filter::Call(name, _) => matches!(
+            name.as_str(),
+            "del" | "delpaths" | "setpath" | "with_entries" | "map_values" | "from_entries"
+        ),
+        _ => false,
     }
-
-    if normalized.contains("del(") || normalized.contains("delpaths(") {
-        return true;
-    }
-
-    if normalized.contains("setpath(") {
-        return true;
-    }
-
-    false
 }
 
 pub fn yaml_to_json(yaml: &str) -> Result<Value, QueryError> {
@@ -100,6 +99,29 @@ mod tests {
         assert!(is_mutation(".count += 1"));
         assert!(is_mutation(".tags |= . + [\"new\"]"));
         assert!(is_mutation("del(.draft)"));
+    }
+
+    #[test]
+    fn detect_query_false_positives_fixed() {
+        assert!(!is_mutation(".title != \"x\""));
+        assert!(!is_mutation(".x >= 1"));
+        assert!(!is_mutation(".x <= 1"));
+        assert!(!is_mutation(".title == \"a=b\""));
+        assert!(!is_mutation("test(\"a=b\")"));
+        assert!(!is_mutation(".title = \"x\" | .title"));
+        assert!(!is_mutation(".author"));
+        assert!(!is_mutation("{a: .title}"));
+    }
+
+    #[test]
+    fn detect_mutation_false_negatives_fixed() {
+        assert!(is_mutation(". + {x: 1}"));
+        assert!(is_mutation(". * {x: 1}"));
+        assert!(is_mutation("with_entries(.)"));
+        assert!(is_mutation("map_values(.)"));
+        assert!(is_mutation("to_entries | from_entries"));
+        assert!(is_mutation(".a = 1 | .b = 2"));
+        assert!(is_mutation("def f: .; .a = 1"));
     }
 
     #[test]

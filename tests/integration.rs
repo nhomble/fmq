@@ -181,16 +181,16 @@ fn in_place() {
 }
 
 #[test]
-fn in_place_rejects_non_mutation() {
-    // --in-place requires a mutation expression
+fn in_place_rejects_non_object_result() {
+    // --in-place requires the expression result to be an object
     let temp_dir = std::env::temp_dir();
-    let temp_file = temp_dir.join("fmq-test-non-mutation.md");
+    let temp_file = temp_dir.join("fmq-test-non-object.md");
 
-    fs::write(&temp_file, "---\ntitle: Hello\n---\nBody\n").unwrap();
+    let original = "---\ntitle: Hello\n---\nBody\n";
+    fs::write(&temp_file, original).unwrap();
 
-    // Expression uses + not +=, so is_mutation returns false
     let output = Command::new(env!("CARGO_BIN_EXE_fmq"))
-        .arg(". + {topics: [\"ai\"]}")
+        .arg(".title != \"x\"")
         .arg(&temp_file)
         .arg("--in-place")
         .output()
@@ -198,15 +198,18 @@ fn in_place_rejects_non_mutation() {
 
     assert!(
         !output.status.success(),
-        "should fail for non-mutation expression"
+        "should fail for non-object result"
     );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("mutation"),
-        "error should mention mutation: {}",
+        stderr.contains("must be an object"),
+        "error should mention 'must be an object': {}",
         stderr
     );
+
+    let result = fs::read_to_string(&temp_file).unwrap();
+    assert_eq!(result, original, "file should be unchanged");
 
     fs::remove_file(&temp_file).ok();
 }

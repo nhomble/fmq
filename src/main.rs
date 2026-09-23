@@ -27,11 +27,6 @@ fn main() {
     let args = Args::parse();
 
     if args.in_place {
-        if !fmq::is_mutation(&args.expr) {
-            eprintln!("error: --in-place requires a mutation expression (use = or |= or del)");
-            process::exit(1);
-        }
-
         let path = match &args.file {
             Some(p) => p,
             None => {
@@ -45,7 +40,7 @@ fn main() {
             process::exit(1);
         });
 
-        let output = fmq::fmq(&args.expr, &content, args.init).unwrap_or_else(|e| {
+        let output = fmq::fmq_document(&args.expr, &content, args.init).unwrap_or_else(|e| {
             eprintln!("error: {e}");
             process::exit(1);
         });
