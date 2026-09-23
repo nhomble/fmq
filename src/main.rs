@@ -1,7 +1,7 @@
 use clap::Parser;
-use std::fs::{self, File};
-use std::io::{self, BufReader};
-use std::path::PathBuf;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::process;
 
 #[derive(Parser)]
@@ -45,7 +45,7 @@ fn main() {
             process::exit(1);
         });
 
-        fs::write(path, output).unwrap_or_else(|e| {
+        write_atomic(path, output.as_bytes()).unwrap_or_else(|e| {
             eprintln!("error: {e}");
             process::exit(1);
         });
@@ -72,4 +72,28 @@ fn main() {
             }
         }
     }
+}
+
+/// Write `contents` to `path` atomically: write a sibling temp file, fsync,
+/// then rename over the target. A crash mid-write leaves the original intact.
+fn write_atomic(path: &Path, contents: &[u8]) -> io::Result<()> {
+    let target = fs::canonicalize(path)?;
+    let dir = target.parent().unwrap_or_else(|| Path::new("."));
+    let name = target.file_name().unwrap_or_default().to_string_lossy();
+    let tmp = dir.join(format!(".{name}.fmq-tmp.{}", process::id()));
+
+    let result = (|| {
+        let perms = fs::metadata(&target)?.permissions();
+        let mut f = OpenOptions::new().write(true).create_new(true).open(&tmp)?;
+        f.write_all(contents)?;
+        f.sync_all()?;
+        drop(f);
+        fs::set_permissions(&tmp, perms)?;
+        fs::rename(&tmp, &target)
+    })();
+
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
 }
