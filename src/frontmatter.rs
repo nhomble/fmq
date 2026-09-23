@@ -19,38 +19,7 @@ pub struct Document {
 }
 
 pub fn extract(markdown: &str, allow_empty: bool) -> Result<Document, ParseError> {
-    let trimmed = markdown.trim_start();
-
-    if !trimmed.starts_with("---") {
-        if allow_empty {
-            return Ok(Document {
-                frontmatter: String::new(),
-                body: markdown.to_string(),
-            });
-        }
-        return Err(ParseError("no frontmatter found".into()));
-    }
-
-    let after_first = &trimmed[3..];
-    let after_newline = after_first
-        .strip_prefix('\n')
-        .or_else(|| after_first.strip_prefix("\r\n"))
-        .ok_or_else(|| ParseError("invalid frontmatter delimiter".into()))?;
-
-    let end = after_newline
-        .find("\n---")
-        .ok_or_else(|| ParseError("unclosed frontmatter".into()))?;
-
-    let frontmatter = after_newline[..end].to_string();
-
-    let rest = &after_newline[end + 4..];
-    let body = rest
-        .strip_prefix('\n')
-        .or_else(|| rest.strip_prefix("\r\n"))
-        .unwrap_or(rest)
-        .to_string();
-
-    Ok(Document { frontmatter, body })
+    extract_reader(markdown.as_bytes(), true, allow_empty)
 }
 
 pub fn extract_reader<R: BufRead>(
@@ -158,6 +127,46 @@ mod tests {
     fn reassemble_simple() {
         let result = reassemble("title: Hello", "Body text");
         assert_eq!(result, "---\ntitle: Hello\n---\nBody text");
+    }
+
+    #[test]
+    fn extract_empty_frontmatter() {
+        // B5
+        let doc = extract("---\n---\nBody\n", false).unwrap();
+        assert_eq!(doc.frontmatter, "");
+        assert_eq!(doc.body, "Body\n");
+    }
+
+    #[test]
+    fn extract_dash_suffix_is_not_delimiter() {
+        // B6
+        let doc = extract("---\na: 1\n---x\n---\nBody\n", false).unwrap();
+        assert_eq!(doc.frontmatter, "a: 1\n---x");
+        assert_eq!(doc.body, "Body\n");
+    }
+
+    #[test]
+    fn extract_dash_suffix_only_is_unclosed() {
+        // B6
+        let err = extract("---\na: 1\n---x\nBody\n", false).err().unwrap();
+        assert_eq!(err.0, "unclosed frontmatter");
+    }
+
+    #[test]
+    fn extract_opening_delimiter_trailing_whitespace() {
+        // B6
+        let doc = extract("---   \na: 1\n---\nBody\n", false).unwrap();
+        assert_eq!(doc.frontmatter, "a: 1");
+        assert_eq!(doc.body, "Body\n");
+    }
+
+    #[test]
+    fn extract_leading_blank_line_is_not_frontmatter() {
+        let md = "\n---\na: 1\n---\nBody\n";
+        assert_eq!(extract(md, false).err().unwrap().0, "no frontmatter found");
+        let doc = extract(md, true).unwrap();
+        assert_eq!(doc.frontmatter, "");
+        assert_eq!(doc.body, md);
     }
 
     #[test]

@@ -2,7 +2,7 @@ mod frontmatter;
 mod query;
 
 pub use frontmatter::{extract, extract_reader, reassemble, Document};
-pub use query::{is_mutation, run};
+pub use query::{is_mutation, run, run_all};
 
 use std::io::BufRead;
 
@@ -46,13 +46,12 @@ pub fn fmq(expr: &str, markdown: &str, init: bool) -> Result<String, Error> {
         &doc.frontmatter
     };
 
-    let result = run(expr, frontmatter)?;
-
     if is_mutation(expr) {
-        let yaml = query::json_to_yaml(&result)?;
-        Ok(reassemble(&yaml, &doc.body))
+        let result = run(expr, frontmatter)?;
+        to_document(&result, &doc.body)
     } else {
-        Ok(format_output(&result))
+        let results = run_all(expr, frontmatter)?;
+        Ok(format_outputs(&results))
     }
 }
 
@@ -66,14 +65,44 @@ pub fn fmq_reader<R: BufRead>(expr: &str, reader: R, init: bool) -> Result<Strin
         &doc.frontmatter
     };
 
-    let result = run(expr, frontmatter)?;
-
     if need_body {
-        let yaml = query::json_to_yaml(&result)?;
-        Ok(reassemble(&yaml, &doc.body))
+        let result = run(expr, frontmatter)?;
+        to_document(&result, &doc.body)
     } else {
-        Ok(format_output(&result))
+        let results = run_all(expr, frontmatter)?;
+        Ok(format_outputs(&results))
     }
+}
+
+/// Always treats the result as the new frontmatter (used by --in-place).
+/// Errors (without producing output) if the result is not an object.
+pub fn fmq_document(expr: &str, markdown: &str, init: bool) -> Result<String, Error> {
+    let doc = extract(markdown, init)?;
+    let frontmatter: &str = if doc.frontmatter.is_empty() {
+        "{}"
+    } else {
+        &doc.frontmatter
+    };
+    let result = run(expr, frontmatter)?;
+    to_document(&result, &doc.body)
+}
+
+fn to_document(result: &serde_json::Value, body: &str) -> Result<String, Error> {
+    if !result.is_object() {
+        return Err(Error::Query(format!(
+            "expression result must be an object to write as frontmatter, got {}",
+            match result {
+                serde_json::Value::Null => "null",
+                serde_json::Value::Bool(_) => "boolean",
+                serde_json::Value::Number(_) => "number",
+                serde_json::Value::String(_) => "string",
+                serde_json::Value::Array(_) => "array",
+                _ => "object",
+            }
+        )));
+    }
+    let yaml = query::json_to_yaml(result)?;
+    Ok(reassemble(&yaml, body))
 }
 
 fn format_output(value: &serde_json::Value) -> String {
@@ -81,4 +110,11 @@ fn format_output(value: &serde_json::Value) -> String {
         serde_json::Value::String(s) => s.clone(),
         _ => serde_json::to_string_pretty(value).unwrap_or_default(),
     }
+}
+
+fn format_outputs(values: &[serde_json::Value]) -> String {
+    values
+        .iter()
+        .map(|v| format!("{}\n", format_output(v)))
+        .collect()
 }
